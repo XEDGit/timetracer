@@ -1,6 +1,13 @@
+FIND THE BASE MEMORY ADDRESS
+
+MACOS:
+
 finding out "base" address of running process: sample timetracer 1 2>/dev/null | grep "Load"
-if I subtract the base address to the value recieved as "this_fn" I get the function offset address, which can be compared to the symbol table to get the function name
 
- __attribute__((no_instrument_function)) : Stop the global wrapper from being called in this specific function
+:
 
- gcc -finstrument-functions: generates a wrapper to every function
+__attribute__((no_instrument_function)) : Stop the global wrapper from being called in this specific function
+
+gcc -finstrument-functions: generates a wrapper to every function
+
+If I subtract the base address to the value recieved as "this_fn" I get the function offset address, which can be compared to the symbol table to get the function name
