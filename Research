@@ -1,13 +1,17 @@
 FIND THE BASE MEMORY ADDRESS
+	MACOS:
+		use "sample <filename> 1 2>/dev/null | grep Load" in terminal and get output with popen
+	LINUX:
+		call function dl_iterate_phdr(<function_name>, 0) and store te base offset into global variable
 
-MACOS:
-
-finding out "base" address of running process: sample timetracer 1 2>/dev/null | grep "Load"
-
-:
+FIND FUNCTION SYMBOL ADDRESSES:
+	"nm --defined-only <filename>"
 
 __attribute__((no_instrument_function)) : Stop the global wrapper from being called in this specific function
 
 gcc -finstrument-functions: generates a wrapper to every function
 
 If I subtract the base address to the value recieved as "this_fn" I get the function offset address, which can be compared to the symbol table to get the function name
+
+command for cub3 with timetracer:
+	gcc src/*/*.c timetracer/timetracer.c build/libmlx42.a -o test -lglfw -lm -ldl -g -finstrument-functions -I includes -fsanitize=address
