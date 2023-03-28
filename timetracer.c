@@ -6,7 +6,7 @@
 /*   By: lmuzio <lmuzio@student.42.fr>                +#+                     */
 /*                                                   +#+                      */
 /*   Created: 2023/03/21 16:58:47 by lmuzio        #+#    #+#                 */
-/*   Updated: 2023/03/28 03:07:43 by lmuzio        ########   odam.nl         */
+/*   Updated: 2023/03/28 19:11:40 by lmuzio        ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -31,6 +31,7 @@ typedef struct funcdata {
 	void			*address;
 	clock_t			time;
 	char			type;
+	char			pool_head;
 	int				depth;
 	struct funcdata	*next;
 	struct funcdata	*last;
@@ -46,8 +47,8 @@ typedef struct dladdr_result {
 	clock_t					max;
 	clock_t					min;
 	int						depth;
-	struct dladdr_result	*next;
-	struct dladdr_result	*last;
+	struct dladdr_result	*right;
+	struct dladdr_result	*inside;
 }	t_dlret;
 
 typedef struct string_storage {
@@ -63,21 +64,14 @@ typedef struct strptr_storage {
 }	t_strptrstore;
 
 #define	MAX_DEPTH 100
+#define	POOL_SIZE 10000
 int				depth = 0;
+t_funcdata		*pool = 0;
+int				pool_index = POOL_SIZE;
 unsigned long	base_address_offset = 0;
 
-__attribute__((no_instrument_function)) static int add_node(t_funcdata tmp, t_funcdata **og)
+__attribute__((no_instrument_function)) static int add_node(t_funcdata *new, t_funcdata **og)
 {
-	t_funcdata	*new = malloc(sizeof(t_funcdata));
-	if (!new)
-	{
-		return (-1);
-	}
-	new->address = tmp.address;
-	new->next = 0;
-	new->time = tmp.time;
-	new->type = tmp.type;
-	new->depth = tmp.depth;
 	if (*og)
 	{
 		t_funcdata *copy = *og;
@@ -98,25 +92,34 @@ __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlre
 		return (-1);
 	t_dlret	*new = malloc(sizeof(t_dlret));
 	if (!new)
-	{
 		return (-1);
-	}
-	new->next = 0;
+	new->inside = 0;
+	new->right = 0;
 	new->time = tmp.time;
 	new->type = tmp.type;
 	new->depth = tmp.depth;
+	new->times = 1;
 	new->str_id = tmp.str_id;
 	if (*og)
 	{
 		t_dlret *copy = *og;
-		copy->last->next = new;
-		copy->last = new;
+		while (copy->depth < new->depth && (copy->inside || copy->right))
+		{
+			while (copy->right)
+				copy = copy->right;
+			if (copy->inside)
+				copy = copy->inside;
+				
+		}
+		while (copy->right)
+			copy = copy->right;
+		if (copy->depth == new->depth)
+			copy->right = new;
+		else
+			copy->inside = new;
 	}
 	else
-	{
-		new->last = new;
 		*og = new;
-	}
 	return (0);
 }
 
@@ -209,11 +212,32 @@ __attribute__((no_instrument_function)) static int	add_strptrstore(t_strptrstore
 	return (0);
 }
 
+__attribute__((no_instrument_function)) static void	manage_pool(void)
+{
+	if (pool_index == POOL_SIZE)
+	{
+		pool = malloc(sizeof(t_dlret) * POOL_SIZE);
+		if (!pool)
+			exit((perror("Malloc error"), 10));
+		pool_index = 0;
+		pool[pool_index].pool_head = 1;
+	}
+}
+
 __attribute__((no_instrument_function)) void __cyg_profile_func_enter (void *called_fn, void *call_site)
 {
 	if (depth++ > MAX_DEPTH)
 		return ;
-	add_node((t_funcdata){.address = called_fn - base_address_offset, .depth = depth, .time = clock(), .type = ENTER}, &data);
+	clock_t time = clock();
+	manage_pool();
+	if (pool_index)
+		pool[pool_index].pool_head = 0;
+	pool[pool_index].address = called_fn - base_address_offset;
+	pool[pool_index].depth = depth;
+	pool[pool_index].time = time;
+	pool[pool_index].type = ENTER;
+	pool[pool_index].next = 0;
+	add_node(&pool[pool_index++], &data);
 	(void) call_site;
 }
 
@@ -221,7 +245,16 @@ __attribute__((no_instrument_function)) void __cyg_profile_func_exit (void *call
 {
 	if (--depth > MAX_DEPTH)
 		return ;
-	add_node((t_funcdata){.address = called_fn - base_address_offset, .depth = depth + 1, .time = clock(), .type = EXIT}, &data);
+	clock_t time = clock();
+	manage_pool();
+	if (pool_index)
+		pool[pool_index].pool_head = 0;
+	pool[pool_index].address = called_fn - base_address_offset;
+	pool[pool_index].depth = depth + 1;
+	pool[pool_index].time = time;
+	pool[pool_index].type = EXIT;
+	pool[pool_index].next = 0;
+	add_node(&pool[pool_index++], &data);
 	(void) call_site;
 }
 
@@ -318,6 +351,7 @@ __attribute__((no_instrument_function)) static void	report(void)
 	t_dlret		*func_info = 0;
 	t_strstore	*func_names = 0;
 	//	organizing informations in t_dlret
+	printf("ORGANISE DATA\n");
 	t_funcdata	*copy = 0;
 	char		*name;
 	int			func_index = 0;
@@ -345,80 +379,58 @@ __attribute__((no_instrument_function)) static void	report(void)
 				}
 			}
 		}
-		copy = data->next;
-		free(data);
-		data = copy;
+		if (data->pool_head)
+		{
+			free(copy);
+			copy = data;
+		}
+		data = data->next;
 	}
 	//	creating allocated 2d array of strings and freeing linked list
 	char **func_names_arr = copy_strstore(func_names);
-	//	grouping identical functions (there should be a flag to skip this)
-	t_dlret *copy_func_info = func_info;
-	t_dlret *tmp_func_info = 0;
-	clock_t max, min;
-	int		max_depth = 0;
-	while (func_info)
-	{
-		max = min = func_info->time;
-		int times = 1;
-		while (func_info->next && func_info->str_id == func_info->next->str_id)
-		{
-			if (func_info->next->time > max)
-				max = func_info->next->time;
-			if (func_info->next->time < min)
-				min = func_info->next->time;
-			tmp_func_info = func_info->next->next;
-			func_info->time += func_info->next->time;
-			free(func_info->next);
-			func_info->next = tmp_func_info;
-			times++;
-		}
-		if (func_info->depth > max_depth)
-			max_depth = func_info->depth;
-		func_info->times = times;
-		func_info->max = max;
-		func_info->min = min;
-		func_info = func_info->next;
-	}
-	func_info = copy_func_info;
 	//	grouping function patterns
-	// t_dlret	*pattern[2];
-	// while (max_depth)
+	// t_dlret *copy_func_info = func_info;
+	// t_dlret	*curr_travered_tree[MAX_DEPTH] = {[0] = func_info};
+	// int		curr_depth = 1;
+	// while (1)
 	// {
-		// search for identical sequences of functions
-		// t_dlret	pattern = {.next = 0};
+	// 	// search for identical sequences of functions
+	// 	t_dlret	pattern = {.right = 0, .inside = 0};
 		
-		// search for function before
-		// while (func_info && func_info->depth != max_depth - 1)
-		// 	func_info = func_info->next;
-		// if (!func_info)
-		// {
-		// 	max_depth--;
-		// 	func_info = copy_func_info;
-		// 	continue;
-		// }
-		// if (func_info->next && func_info->next->depth == max_depth)
-		// {
-		// 	pattern[0] = func_info;
-		// 	pattern[1] = func_info->next;
-		// }
-		// int times = 1;
-		// while (pattern[1]->next && pattern[0]->str_id == pattern[1]->next->str_id \
-		// 	&& pattern[1]->next->next && pattern[1]->str_id == pattern[1]->next->next->str_id)
-		// {
-		// 	t_dlret	*pattern_copy[2] = {pattern[0], pattern[1]};
-		// 	pattern[0] = pattern[1]->next;
-		// 	pattern[1] = pattern[1]->next->next;
-		// 	free(pattern_copy[0]);
-		// 	free(pattern_copy[1]);
-		// 	times++;
-		// }
-		//add info to linked list somehow
+	// 	// search for function before
+	// 	while (func_info && func_info->depth != curr_depth)
+	// 		func_info = func_info->next;
+	// 	if (!func_info)
+	// 	{
+	// 		func_info = copy_func_info;
+	// 		continue;
+	// 	}
+	// 	if (func_info->next && func_info->next->depth == max_depth)
+	// 	{
+	// 		pattern[0] = func_info;
+	// 		pattern[1] = func_info->next;
+	// 	}
+	// 	int times = 1;
+	// 	while (pattern[1]->next && pattern[0]->str_id == pattern[1]->next->str_id \
+	// 		&& pattern[1]->next->next && pattern[1]->str_id == pattern[1]->next->next->str_id)
+	// 	{
+	// 		t_dlret	*pattern_copy[2] = {pattern[0], pattern[1]};
+	// 		pattern[0] = pattern[1]->next;
+	// 		pattern[1] = pattern[1]->next->next;
+	// 		free(pattern_copy[0]);
+	// 		free(pattern_copy[1]);
+	// 		times++;
+	// 	}
+	// 	add info to linked list somehow
 		
 	// 	func_info =	pattern[1]->next;
 	// }
 	// func_info = copy_func_info;
 	//	displaying data
-	copy_func_info = func_info;
+	dprintf(2, "DISPLAY DATA\n");
+	t_dlret	*curr_traversed_nodes[MAX_DEPTH];
+	int		curr_depth = 0;
+	curr_traversed_nodes[curr_depth] = func_info;
 	printf("Report:\n");
 	char	*indentation = malloc(MAX_DEPTH + 2);
 	memset(indentation, '\t', MAX_DEPTH);
@@ -431,17 +443,52 @@ __attribute__((no_instrument_function)) static void	report(void)
 		else
 			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call, peak: %.3f, min: %.3f\n", indentation, func_names_arr[func_info->str_id], (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->max  / (float)1000, (float)func_info->min / (float)1000);
 		indentation[func_info->depth] = '\t';
-		func_info = func_info->next;
+		if (func_info->inside)
+			func_info = curr_traversed_nodes[++curr_depth] = func_info->inside;
+		else if (func_info->right)
+			func_info = func_info->right;
+		else
+		{
+			if (curr_depth)
+			{
+				while (curr_depth)
+				{
+					func_info = curr_traversed_nodes[--curr_depth];
+					if (func_info->right)
+						break ;
+				}
+				func_info = curr_traversed_nodes[curr_depth] = func_info->right;
+			}
+			else
+				break ;
+		}
 	}
 	free(indentation);
 	//	free func_info and func_names_arr
+	dprintf(2, "FREEING DATA\n");
 	free_all:
-	func_info = copy_func_info;
+	func_info = curr_traversed_nodes[0];
 	while (func_info)
 	{
-		copy_func_info = func_info->next;
-		free(func_info);
-		func_info = copy_func_info;
+		t_dlret	*to_free = func_info;
+		if (func_info->inside)
+			func_info = curr_traversed_nodes[++curr_depth] = func_info->inside;
+		else if (func_info->right)
+			func_info = func_info->right;
+		else
+		{
+			if (curr_depth)
+			{
+				while (curr_depth && !(func_info = curr_traversed_nodes[--curr_depth])->right);
+				func_info = func_info->right;
+			}
+			else
+			{
+				func_info = 0;
+				break ;
+			}
+		}
+		free(to_free);
 	}
 	int i = 0;
 	while (func_names_arr[i])
