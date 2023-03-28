@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
-/*                                                        ::::::::            */
-/*   timetracer.c                                       :+:    :+:            */
-/*                                                     +:+                    */
-/*   By: lmuzio <lmuzio@student.42.fr>                +#+                     */
-/*                                                   +#+                      */
-/*   Created: 2023/03/21 16:58:47 by lmuzio        #+#    #+#                 */
-/*   Updated: 2023/03/28 19:11:40 by lmuzio        ########   odam.nl         */
+/*                                                        :::      ::::::::   */
+/*   timetracer.c                                       :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: lmuzio <lmuzio@student.42.fr>              +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2023/03/21 16:58:47 by lmuzio            #+#    #+#             */
+/*   Updated: 2023/03/28 21:31:42 by lmuzio           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,8 +21,46 @@
 #include <time.h>
 #define __USE_GNU
 #define _GNU_SOURCE
-#include <link.h>
+__attribute__((no_instrument_function)) static void	report(void);
+#define	MAX_DEPTH 4
+#define	POOL_SIZE 100000
+unsigned long	base_address_offset = 0;
+#ifdef __APPLE__
+#define OFFSET_FUNC_NAME 1
+# include <mach-o/dyld.h>
+
+__attribute__((no_instrument_function)) void callback(const struct mach_header *info, intptr_t vmaddr_slide)
+{
+	if (!base_address_offset)
+		base_address_offset = (unsigned long)vmaddr_slide;
+}
+
+__attribute__((no_instrument_function)) __attribute__((constructor)) void on_start(void)
+{
+    _dyld_register_func_for_add_image(&callback);
+	atexit(&report);
+}
+
+#else
+#define OFFSET_FUNC_NAME 0
+# include <link.h>
+
+__attribute__((no_instrument_function)) int callback(struct dl_phdr_info *info, size_t size, void *data)
+{
+	if (!base_address_offset)
+		base_address_offset = (unsigned long)info->dlpi_addr;
+    return 0;
+}
+
+__attribute__((no_instrument_function)) __attribute__((constructor)) void on_start(void)
+{
+    dl_iterate_phdr(&callback, 0);
+	atexit(&report);
+}
+
+#endif
 #include <dlfcn.h>
+
 
 #define	ENTER 0
 #define	EXIT 1
@@ -63,12 +101,9 @@ typedef struct strptr_storage {
 	struct strptr_storage	*next;
 }	t_strptrstore;
 
-#define	MAX_DEPTH 100
-#define	POOL_SIZE 10000
 int				depth = 0;
 t_funcdata		*pool = 0;
 int				pool_index = POOL_SIZE;
-unsigned long	base_address_offset = 0;
 
 __attribute__((no_instrument_function)) static int add_node(t_funcdata *new, t_funcdata **og)
 {
@@ -88,6 +123,7 @@ __attribute__((no_instrument_function)) static int add_node(t_funcdata *new, t_f
 
 __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlret **og)
 {
+	static t_dlret	*curr_traversal[MAX_DEPTH] = {0};
 	if (tmp.str_id == -1)
 		return (-1);
 	t_dlret	*new = malloc(sizeof(t_dlret));
@@ -102,24 +138,23 @@ __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlre
 	new->str_id = tmp.str_id;
 	if (*og)
 	{
-		t_dlret *copy = *og;
-		while (copy->depth < new->depth && (copy->inside || copy->right))
+		t_dlret *copy = curr_traversal[new->depth - 1];
+		if (!copy)
 		{
-			while (copy->right)
-				copy = copy->right;
-			if (copy->inside)
-				copy = copy->inside;
-				
+			copy = curr_traversal[new->depth - 2];
+			copy->inside = curr_traversal[new->depth - 1] = new;
 		}
-		while (copy->right)
-			copy = copy->right;
-		if (copy->depth == new->depth)
-			copy->right = new;
 		else
-			copy->inside = new;
+		{
+			copy->right = new;
+			curr_traversal[new->depth - 1] = new;
+		}
 	}
 	else
+	{
+		curr_traversal[new->depth - 1] = new;
 		*og = new;
+	}
 	return (0);
 }
 
@@ -294,7 +329,7 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 	static t_strptrstore *db = 0;
 	if (!db)
 	{
-		FILE *nm_out_stream = popen("nm --defined-only /home/xed/Desktop/Informatica/C/cub3/test", "r");
+		FILE *nm_out_stream = popen("nm --defined-only $(pwd)/test", "r");
 		char *str_buff = 0, *str_copy;
 		void *func_ptr;
 
@@ -386,6 +421,8 @@ __attribute__((no_instrument_function)) static void	report(void)
 		}
 		data = data->next;
 	}
+	if (copy)
+		free(copy);
 	//	creating allocated 2d array of strings and freeing linked list
 	char **func_names_arr = copy_strstore(func_names);
 	//	grouping function patterns
@@ -428,7 +465,7 @@ __attribute__((no_instrument_function)) static void	report(void)
 	// func_info = copy_func_info;
 	//	displaying data
 	dprintf(2, "DISPLAY DATA\n");
-	t_dlret	*curr_traversed_nodes[MAX_DEPTH];
+	t_dlret	*curr_traversed_nodes[MAX_DEPTH + 1];
 	int		curr_depth = 0;
 	curr_traversed_nodes[curr_depth] = func_info;
 	printf("Report:\n");
@@ -439,9 +476,9 @@ __attribute__((no_instrument_function)) static void	report(void)
 	{
 		indentation[func_info->depth] = 0;
 		if (func_info->times == 1)
-			printf("%s%s:%10.3fms\n", indentation, func_names_arr[func_info->str_id], (float)func_info->time / (float)1000);
+			printf("%s%s:%10.3fms\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
 		else
-			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call, peak: %.3f, min: %.3f\n", indentation, func_names_arr[func_info->str_id], (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->max  / (float)1000, (float)func_info->min / (float)1000);
+			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call, peak: %.3f, min: %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->max  / (float)1000, (float)func_info->min / (float)1000);
 		indentation[func_info->depth] = '\t';
 		if (func_info->inside)
 			func_info = curr_traversed_nodes[++curr_depth] = func_info->inside;
@@ -497,15 +534,19 @@ __attribute__((no_instrument_function)) static void	report(void)
 	close(fd);
 }
 
-__attribute__((no_instrument_function)) int callback(struct dl_phdr_info *info, size_t size, void *data)
-{
-	if (!base_address_offset)
-		base_address_offset = (unsigned long)info->dlpi_addr;
-    return 0;
-}
+// void a();
+// void b();
+// void c();
+// void d();
+// void a(){b();b();}
+// void b(){}
+// void c(){d();}
+// void d(){a();b();}
 
-__attribute__((no_instrument_function)) __attribute__((constructor)) void on_start(void)
-{
-    dl_iterate_phdr(&callback, 0);
-	atexit(&report);
-}
+// int main()
+// {
+// 	a();
+// 	b();
+// 	c();
+// 	d();
+// }
