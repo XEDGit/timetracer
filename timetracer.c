@@ -1,12 +1,12 @@
 /* ************************************************************************** */
 /*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   timetracer.c                                       :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: lmuzio <lmuzio@student.42.fr>              +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2023/03/21 16:58:47 by lmuzio            #+#    #+#             */
-/*   Updated: 2023/03/21 21:13:05 by lmuzio           ###   ########.fr       */
+/*                                                        ::::::::            */
+/*   timetracer.c                                       :+:    :+:            */
+/*                                                     +:+                    */
+/*   By: lmuzio <lmuzio@student.42.fr>                +#+                     */
+/*                                                   +#+                      */
+/*   Created: 2023/03/21 16:58:47 by lmuzio        #+#    #+#                 */
+/*   Updated: 2023/03/28 03:07:43 by lmuzio        ########   odam.nl         */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -42,6 +42,9 @@ typedef struct dladdr_result {
 	int						str_id;
 	clock_t					time;
 	char					type;
+	int						times;
+	clock_t					max;
+	clock_t					min;
 	int						depth;
 	struct dladdr_result	*next;
 	struct dladdr_result	*last;
@@ -59,7 +62,7 @@ typedef struct strptr_storage {
 	struct strptr_storage	*next;
 }	t_strptrstore;
 
-#define	MAX_DEPTH 1
+#define	MAX_DEPTH 100
 int				depth = 0;
 unsigned long	base_address_offset = 0;
 
@@ -258,7 +261,7 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 	static t_strptrstore *db = 0;
 	if (!db)
 	{
-		FILE *nm_out_stream = popen("nm --defined-only /home/xed/it/codam/cub3/test", "r");
+		FILE *nm_out_stream = popen("nm --defined-only /home/xed/Desktop/Informatica/C/cub3/test", "r");
 		char *str_buff = 0, *str_copy;
 		void *func_ptr;
 
@@ -291,18 +294,12 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 	return (copy->str);
 }
 
-__attribute__((no_instrument_function)) static clock_t	find_total_time(t_funcdata *d, clock_t end_time)
+__attribute__((no_instrument_function)) static clock_t	find_total_time(t_funcdata *d)
 {
 	clock_t	start = d->time;
 	void	*caller = d->address;
 	int		recursive_depth = 0;
-	static int	is_main = 1;
-	
-	if (is_main)
-	{
-		is_main--;
-		return (end_time - start);
-	}
+
 	d = d->next;
 	while (d)
 	{
@@ -318,7 +315,6 @@ __attribute__((no_instrument_function)) static clock_t	find_total_time(t_funcdat
 
 __attribute__((no_instrument_function)) static void	report(void)
 {
-	clock_t		end_time = clock();
 	t_dlret		*func_info = 0;
 	t_strstore	*func_names = 0;
 	//	organizing informations in t_dlret
@@ -337,13 +333,12 @@ __attribute__((no_instrument_function)) static void	report(void)
 		if (data->type == ENTER)
 		{
 			name = find_symbol(data->address);
-			// TODO: find time of execution for every function
 			if (name)
 			{
 				func_index = search_strstore(name, func_names);
 				if (func_index == -1)
 					func_index = add_strstore((t_strstore){.str = strdup(name)}, &func_names);
-				if (add_dlret((t_dlret){.str_id = func_index, .depth = data->depth, .time = find_total_time(data, end_time), .type = data->type}, &func_info) == -1)
+				if (add_dlret((t_dlret){.str_id = func_index, .depth = data->depth, .times = 0, .time = find_total_time(data), .type = data->type}, &func_info) == -1)
 				{
 					perror("Error parsing function informations: ");
 					exit(1);
@@ -356,8 +351,74 @@ __attribute__((no_instrument_function)) static void	report(void)
 	}
 	//	creating allocated 2d array of strings and freeing linked list
 	char **func_names_arr = copy_strstore(func_names);
-	//	creating data to display
+	//	grouping identical functions (there should be a flag to skip this)
 	t_dlret *copy_func_info = func_info;
+	t_dlret *tmp_func_info = 0;
+	clock_t max, min;
+	int		max_depth = 0;
+	while (func_info)
+	{
+		max = min = func_info->time;
+		int times = 1;
+		while (func_info->next && func_info->str_id == func_info->next->str_id)
+		{
+			if (func_info->next->time > max)
+				max = func_info->next->time;
+			if (func_info->next->time < min)
+				min = func_info->next->time;
+			tmp_func_info = func_info->next->next;
+			func_info->time += func_info->next->time;
+			free(func_info->next);
+			func_info->next = tmp_func_info;
+			times++;
+		}
+		if (func_info->depth > max_depth)
+			max_depth = func_info->depth;
+		func_info->times = times;
+		func_info->max = max;
+		func_info->min = min;
+		func_info = func_info->next;
+	}
+	func_info = copy_func_info;
+	//	grouping function patterns
+	// t_dlret	*pattern[2];
+	// while (max_depth)
+	// {
+		// search for identical sequences of functions
+		// t_dlret	pattern = {.next = 0};
+		
+		// search for function before
+		// while (func_info && func_info->depth != max_depth - 1)
+		// 	func_info = func_info->next;
+		// if (!func_info)
+		// {
+		// 	max_depth--;
+		// 	func_info = copy_func_info;
+		// 	continue;
+		// }
+		// if (func_info->next && func_info->next->depth == max_depth)
+		// {
+		// 	pattern[0] = func_info;
+		// 	pattern[1] = func_info->next;
+		// }
+		// int times = 1;
+		// while (pattern[1]->next && pattern[0]->str_id == pattern[1]->next->str_id \
+		// 	&& pattern[1]->next->next && pattern[1]->str_id == pattern[1]->next->next->str_id)
+		// {
+		// 	t_dlret	*pattern_copy[2] = {pattern[0], pattern[1]};
+		// 	pattern[0] = pattern[1]->next;
+		// 	pattern[1] = pattern[1]->next->next;
+		// 	free(pattern_copy[0]);
+		// 	free(pattern_copy[1]);
+		// 	times++;
+		// }
+		//add info to linked list somehow
+		
+	// 	func_info =	pattern[1]->next;
+	// }
+	// func_info = copy_func_info;
+	//	displaying data
+	copy_func_info = func_info;
 	printf("Report:\n");
 	char	*indentation = malloc(MAX_DEPTH + 2);
 	memset(indentation, '\t', MAX_DEPTH);
@@ -365,7 +426,10 @@ __attribute__((no_instrument_function)) static void	report(void)
 	while (func_info)
 	{
 		indentation[func_info->depth] = 0;
-		printf("%s%s: %lf\n", indentation, func_names_arr[func_info->str_id], (double)func_info->time / (double)CLOCKS_PER_SEC);
+		if (func_info->times == 1)
+			printf("%s%s:%10.3fms\n", indentation, func_names_arr[func_info->str_id], (float)func_info->time / (float)1000);
+		else
+			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call, peak: %.3f, min: %.3f\n", indentation, func_names_arr[func_info->str_id], (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->max  / (float)1000, (float)func_info->min / (float)1000);
 		indentation[func_info->depth] = '\t';
 		func_info = func_info->next;
 	}
