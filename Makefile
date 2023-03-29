@@ -1,4 +1,4 @@
-NAME := timetracer
+NAME := test
 
 SRC := timetracer.c
 
@@ -9,6 +9,7 @@ debug: DBG = -fsanitize=address
 debug: re
 
 prod: PROD_FLAGS = -Wall -Wextra -Werror -Wpedantic
+prod: NAME = timetracer
 prod: re
 
 clean:

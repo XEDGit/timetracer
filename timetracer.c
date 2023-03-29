@@ -11,8 +11,6 @@
 /* ************************************************************************** */
 
 #include <sys/types.h>
-#include <sys/ptrace.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,7 +121,8 @@ __attribute__((no_instrument_function)) static int add_node(t_funcdata *new, t_f
 
 __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlret **og)
 {
-	static t_dlret	*curr_traversal[MAX_DEPTH] = {0};
+	static t_dlret	*curr_traversal[MAX_DEPTH + 1] = {0};
+	static int		curr_depth = 0;
 	if (tmp.str_id == -1)
 		return (-1);
 	t_dlret	*new = malloc(sizeof(t_dlret));
@@ -138,16 +137,17 @@ __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlre
 	new->str_id = tmp.str_id;
 	if (*og)
 	{
-		t_dlret *copy = curr_traversal[new->depth - 1];
-		if (!copy)
+		t_dlret *copy;
+		if (new->depth - 1 > curr_depth)
 		{
-			copy = curr_traversal[new->depth - 2];
-			copy->inside = curr_traversal[new->depth - 1] = new;
+			copy = curr_traversal[curr_depth++];
+			copy->inside = curr_traversal[curr_depth] = new;
 		}
 		else
 		{
-			copy->right = new;
-			curr_traversal[new->depth - 1] = new;
+			curr_depth = new->depth - 1;
+			copy = curr_traversal[new->depth - 1];
+			copy->right = curr_traversal[new->depth - 1] = new;
 		}
 	}
 	else
@@ -483,7 +483,7 @@ __attribute__((no_instrument_function)) static void	report(void)
 		if (func_info->inside)
 			func_info = curr_traversed_nodes[++curr_depth] = func_info->inside;
 		else if (func_info->right)
-			func_info = func_info->right;
+			func_info = curr_traversed_nodes[curr_depth] = func_info->right;
 		else
 		{
 			if (curr_depth)
@@ -538,11 +538,13 @@ __attribute__((no_instrument_function)) static void	report(void)
 // void b();
 // void c();
 // void d();
+
 // void a(){b();b();}
 // void b(){}
 // void c(){d();}
 // void d(){a();b();}
-
+// // a-b-b-b-c-d-a-b-b-b-d-a-b-b-b
+// // 1 2 2 1 1 2 3 4 4 3 1 2 3 3 2
 // int main()
 // {
 // 	a();
