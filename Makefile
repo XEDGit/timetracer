@@ -1,9 +1,9 @@
 NAME := test
 
-SRC := timetracer.c
+SRC := timetracer.c func_grouping.c
 
 $(NAME): $(SRC)
-	gcc $< -o $@ -finstrument-functions -g -ldl -fPIC $(PROD_FLAGS) $(DBG)
+	gcc $^ -o $@ -finstrument-functions -g -ldl -fPIC $(PROD_FLAGS) $(DBG)
 
 debug: DBG = -fsanitize=address
 debug: re

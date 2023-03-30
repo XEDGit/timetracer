@@ -10,18 +10,7 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-#include <sys/types.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <time.h>
-#define __USE_GNU
-#define _GNU_SOURCE
-__attribute__((no_instrument_function)) static void	report(void);
-#define	MAX_DEPTH 4
-#define	POOL_SIZE 100000
+#include "timetracer.h"
 unsigned long	base_address_offset = 0;
 #ifdef __APPLE__
 #define OFFSET_FUNC_NAME 1
@@ -57,48 +46,7 @@ __attribute__((no_instrument_function)) __attribute__((constructor)) void on_sta
 }
 
 #endif
-#include <dlfcn.h>
-
-
-#define	ENTER 0
-#define	EXIT 1
-
-typedef struct funcdata {
-	void			*address;
-	clock_t			time;
-	char			type;
-	char			pool_head;
-	int				depth;
-	struct funcdata	*next;
-	struct funcdata	*last;
-} t_funcdata;
-
 t_funcdata *data = 0;
-
-typedef struct dladdr_result {
-	int						str_id;
-	clock_t					time;
-	char					type;
-	int						times;
-	clock_t					max;
-	clock_t					min;
-	int						depth;
-	struct dladdr_result	*right;
-	struct dladdr_result	*inside;
-}	t_dlret;
-
-typedef struct string_storage {
-	char					*str;
-	struct string_storage	*next;
-	struct string_storage	*last;
-}	t_strstore;
-
-typedef struct strptr_storage {
-	char					*str;
-	void					*ptr;
-	struct strptr_storage	*next;
-}	t_strptrstore;
-
 int				depth = 0;
 t_funcdata		*pool = 0;
 int				pool_index = POOL_SIZE;
@@ -426,43 +374,7 @@ __attribute__((no_instrument_function)) static void	report(void)
 	//	creating allocated 2d array of strings and freeing linked list
 	char **func_names_arr = copy_strstore(func_names);
 	//	grouping function patterns
-	// t_dlret *copy_func_info = func_info;
-	// t_dlret	*curr_travered_tree[MAX_DEPTH] = {[0] = func_info};
-	// int		curr_depth = 1;
-	// while (1)
-	// {
-	// 	// search for identical sequences of functions
-	// 	t_dlret	pattern = {.right = 0, .inside = 0};
-		
-	// 	// search for function before
-	// 	while (func_info && func_info->depth != curr_depth)
-	// 		func_info = func_info->next;
-	// 	if (!func_info)
-	// 	{
-	// 		func_info = copy_func_info;
-	// 		continue;
-	// 	}
-	// 	if (func_info->next && func_info->next->depth == max_depth)
-	// 	{
-	// 		pattern[0] = func_info;
-	// 		pattern[1] = func_info->next;
-	// 	}
-	// 	int times = 1;
-	// 	while (pattern[1]->next && pattern[0]->str_id == pattern[1]->next->str_id \
-	// 		&& pattern[1]->next->next && pattern[1]->str_id == pattern[1]->next->next->str_id)
-	// 	{
-	// 		t_dlret	*pattern_copy[2] = {pattern[0], pattern[1]};
-	// 		pattern[0] = pattern[1]->next;
-	// 		pattern[1] = pattern[1]->next->next;
-	// 		free(pattern_copy[0]);
-	// 		free(pattern_copy[1]);
-	// 		times++;
-	// 	}
-	// 	add info to linked list somehow
-		
-	// 	func_info =	pattern[1]->next;
-	// }
-	// func_info = copy_func_info;
+	group_functions(func_info);
 	//	displaying data
 	dprintf(2, "DISPLAY DATA\n");
 	t_dlret	*curr_traversed_nodes[MAX_DEPTH + 1];
