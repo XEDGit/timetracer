@@ -6,7 +6,7 @@
 /*   By: lmuzio <lmuzio@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/03/21 16:58:47 by lmuzio            #+#    #+#             */
-/*   Updated: 2023/03/28 21:31:42 by lmuzio           ###   ########.fr       */
+/*   Updated: 2023/04/04 20:29:37 by lmuzio           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -18,8 +18,12 @@ unsigned long	base_address_offset = 0;
 
 __attribute__((no_instrument_function)) void callback(const struct mach_header *info, intptr_t vmaddr_slide)
 {
-	if (!base_address_offset)
+	static int stored = 0;
+	if (!stored)
+	{
+		stored = 1;
 		base_address_offset = (unsigned long)vmaddr_slide;
+	}
 }
 
 __attribute__((no_instrument_function)) __attribute__((constructor)) void on_start(void)
@@ -70,6 +74,7 @@ __attribute__((no_instrument_function)) static int add_node(t_funcdata *new, t_f
 __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlret **og)
 {
 	static t_dlret	*curr_traversal[MAX_DEPTH + 1] = {0};
+	static t_dlret	*last = 0;
 	static int		curr_depth = 0;
 	if (tmp.str_id == -1)
 		return (-1);
@@ -83,9 +88,15 @@ __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlre
 	new->depth = tmp.depth;
 	new->times = 1;
 	new->str_id = tmp.str_id;
+	new->next = 0;
+	new->max = 0;
+	new->min = 999999;
+	if (last)
+		last->next = new;
+	last = new;
 	if (*og)
 	{
-		t_dlret *copy;
+		t_dlret	*copy = 0;
 		if (new->depth - 1 > curr_depth)
 		{
 			copy = curr_traversal[curr_depth++];
@@ -94,8 +105,8 @@ __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlre
 		else
 		{
 			curr_depth = new->depth - 1;
-			copy = curr_traversal[new->depth - 1];
-			copy->right = curr_traversal[new->depth - 1] = new;
+			copy = curr_traversal[curr_depth];
+			copy->right = curr_traversal[curr_depth] = new;
 		}
 	}
 	else
@@ -277,7 +288,7 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 	static t_strptrstore *db = 0;
 	if (!db)
 	{
-		FILE *nm_out_stream = popen("nm --defined-only $(pwd)/test", "r");
+		FILE *nm_out_stream = popen("nm --defined-only $PWD/test", "r");
 		char *str_buff = 0, *str_copy;
 		void *func_ptr;
 
@@ -339,11 +350,11 @@ __attribute__((no_instrument_function)) static void	report(void)
 	char		*name;
 	int			func_index = 0;
 
-	int fd = open("timetracer_out.txt", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	if (fd > 0)
-		dup2(fd, 1);
-	else
-		goto free_all;
+	// int fd = open("timetracer_out.txt", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	// if (fd > 0)
+	// 	dup2(fd, 1);
+	// else
+	// 	goto free_all;	//DEBUG
 
 	while (data)
 	{
@@ -390,60 +401,27 @@ __attribute__((no_instrument_function)) static void	report(void)
 		if (func_info->times == 1)
 			printf("%s%s:%10.3fms\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
 		else
-			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call, peak: %.3f, min: %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->max  / (float)1000, (float)func_info->min / (float)1000);
+			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
 		indentation[func_info->depth] = '\t';
-		if (func_info->inside)
-			func_info = curr_traversed_nodes[++curr_depth] = func_info->inside;
-		else if (func_info->right)
-			func_info = curr_traversed_nodes[curr_depth] = func_info->right;
-		else
-		{
-			if (curr_depth)
-			{
-				while (curr_depth)
-				{
-					func_info = curr_traversed_nodes[--curr_depth];
-					if (func_info->right)
-						break ;
-				}
-				func_info = curr_traversed_nodes[curr_depth] = func_info->right;
-			}
-			else
-				break ;
-		}
+		func_info = func_info->next;
 	}
 	free(indentation);
 	//	free func_info and func_names_arr
 	dprintf(2, "FREEING DATA\n");
+	// close(fd); //DEBUG
 	free_all:
 	func_info = curr_traversed_nodes[0];
 	while (func_info)
 	{
 		t_dlret	*to_free = func_info;
-		if (func_info->inside)
-			func_info = curr_traversed_nodes[++curr_depth] = func_info->inside;
-		else if (func_info->right)
-			func_info = func_info->right;
-		else
-		{
-			if (curr_depth)
-			{
-				while (curr_depth && !(func_info = curr_traversed_nodes[--curr_depth])->right);
-				func_info = func_info->right;
-			}
-			else
-			{
-				func_info = 0;
-				break ;
-			}
-		}
+		func_info = func_info->next;
 		free(to_free);
 	}
 	int i = 0;
 	while (func_names_arr[i])
 		free(func_names_arr[i++]);
+	find_symbol(0);
 	free(func_names_arr);
-	close(fd);
 }
 
 // void a();
@@ -459,8 +437,15 @@ __attribute__((no_instrument_function)) static void	report(void)
 // // 1 2 2 1 1 2 3 4 4 3 1 2 3 3 2
 // int main()
 // {
-// 	a();
+// 	// a();
+// 	// b();
+// 	// c();
+// 	// d();
+// 	d();
+// 	d();
 // 	b();
-// 	c();
+// 	d();
+// 	d();
+// 	d();
 // 	d();
 // }

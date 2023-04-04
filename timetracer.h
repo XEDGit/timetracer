@@ -11,7 +11,7 @@
 # define __USE_GNU
 # define _GNU_SOURCE
 # include <dlfcn.h>
-# define	MAX_DEPTH 4
+# define	MAX_DEPTH 1
 # define	POOL_SIZE 100000
 # define	ENTER 0
 # define	EXIT 1
@@ -36,6 +36,7 @@ typedef struct dladdr_result {
 	int						depth;
 	struct dladdr_result	*right;
 	struct dladdr_result	*inside;
+	struct dladdr_result	*next;
 }	t_dlret;
 
 typedef struct string_storage {
