@@ -43,13 +43,19 @@ __attribute__((no_instrument_function)) static void	*search_matching_branches(vo
 		pattern_end = pattern_end->next;
 		pattern_start = pattern_start->next;
 	}
-	return ((void *)1);
+	if (!pattern_end)
+		pthread_exit((void *)0);
+	pthread_exit((void *)1);
 }
 
 __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree, t_dlret *toconnect, t_dlret *toadd)
 {
 	int	depth = tofree->depth;
 	toadd->time += tofree->time;
+	if (toadd->min > tofree->time)
+		toadd->min = tofree->time;
+	if (toadd->max < tofree->time)
+		toadd->max = tofree->time;
 	t_dlret *copy = tofree;
 	tofree = tofree->next;
 	free(copy);

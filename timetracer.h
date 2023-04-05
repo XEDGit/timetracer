@@ -11,7 +11,7 @@
 # define __USE_GNU
 # define _GNU_SOURCE
 # include <dlfcn.h>
-# define	MAX_DEPTH 1
+# define	MAX_DEPTH 4
 # define	POOL_SIZE 100000
 # define	ENTER 0
 # define	EXIT 1
@@ -60,5 +60,20 @@ typedef struct threadlist {
 
 __attribute__((no_instrument_function)) static void	report(void);
 __attribute__((no_instrument_function)) void		group_functions(t_dlret *func_info);
+
+# ifndef COLORS
+#  define COLORS 1
+# endif
+# ifndef ITER_GROUP_MAX
+#  define ITER_GROUP_MAX 5
+# endif
+# define DEF_COLOR "\e[0;39m"
+# define GRAY "\e[0;90m"
+# define RED "\e[0;91m"
+# define GREEN "\e[0;92m"
+# define YELLOW "\e[0;93m"
+# define BLUE "\e[0;94m"
+# define MAGENTA "\e[0;95m"
+# define CYAN "\e[0;96m"
 
 #endif

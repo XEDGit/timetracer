@@ -321,6 +321,8 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 	return (copy->str);
 }
 
+clock_t	end_time;
+
 __attribute__((no_instrument_function)) static clock_t	find_total_time(t_funcdata *d)
 {
 	clock_t	start = d->time;
@@ -332,16 +334,16 @@ __attribute__((no_instrument_function)) static clock_t	find_total_time(t_funcdat
 	{
 		if (d->address == caller && d->type == ENTER)
 			recursive_depth++;
-		if (d->address == caller && d->type == EXIT)
-			if (recursive_depth-- == 0)
-				return (d->time - start);
+		if (d->address == caller && d->type == EXIT && recursive_depth-- == 0)
+			return (d->time - start);
 		d = d->next;
 	}
-	return (-1);
+	return (end_time - start);
 }
 
 __attribute__((no_instrument_function)) static void	report(void)
 {
+	end_time = clock();
 	t_dlret		*func_info = 0;
 	t_strstore	*func_names = 0;
 	//	organizing informations in t_dlret
@@ -385,27 +387,45 @@ __attribute__((no_instrument_function)) static void	report(void)
 	//	creating allocated 2d array of strings and freeing linked list
 	char **func_names_arr = copy_strstore(func_names);
 	//	grouping function patterns
-	group_functions(func_info);
+	for (int iter = 0; iter < ITER_GROUP_MAX; iter++)
+		group_functions(func_info);
 	//	displaying data
 	dprintf(2, "DISPLAY DATA\n");
 	t_dlret	*curr_traversed_nodes[MAX_DEPTH + 1];
 	int		curr_depth = 0;
 	curr_traversed_nodes[curr_depth] = func_info;
+	//	set colors
+	char *col[7] = {
+		GRAY,
+		RED,
+		GREEN,
+		YELLOW,
+		BLUE,
+		MAGENTA,
+		CYAN
+	};
 	printf("Report:\n");
-	char	*indentation = malloc(MAX_DEPTH + 2);
-	memset(indentation, '\t', MAX_DEPTH);
-	indentation[MAX_DEPTH + 1] = 0;
+	//	print
+	int	last_depth = 0;
 	while (func_info)
 	{
-		indentation[func_info->depth] = 0;
+		for (int i = 0; i < func_info->depth; i++)
+		{
+			if (COLORS)
+				write(1, col[i % 7], 8);
+			if (i < func_info->depth - 1)
+				write(1, "\t|", 2);
+			else
+				write(1, "\t", 1);
+		}
+		last_depth = func_info->depth;
 		if (func_info->times == 1)
-			printf("%s%s:%10.3fms\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
+			printf("%s: %.3fms\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
 		else
-			printf("%s%s:%10.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
-		indentation[func_info->depth] = '\t';
+			printf("%s: %.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
 		func_info = func_info->next;
 	}
-	free(indentation);
+	printf("%s\n", DEF_COLOR);
 	//	free func_info and func_names_arr
 	dprintf(2, "FREEING DATA\n");
 	// close(fd); //DEBUG
