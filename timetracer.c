@@ -288,7 +288,7 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 	static t_strptrstore *db = 0;
 	if (!db)
 	{
-		FILE *nm_out_stream = popen("nm --defined-only $PWD/test", "r");
+		FILE *nm_out_stream = popen("nm --defined-only $PWD/test", "r"); //	TODO make it a variable recieved from shell script
 		char *str_buff = 0, *str_copy;
 		void *func_ptr;
 
@@ -421,8 +421,11 @@ __attribute__((no_instrument_function)) static void	report(void)
 		last_depth = func_info->depth;
 		if (func_info->times == 1)
 			printf("%s: %.3fms\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
-		else
+		//	TODO use to set threashold with flag
+		else if (func_info->time)
 			printf("%s: %.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
+		else
+			printf("%s: %.3fms/%d calls\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times);
 		func_info = func_info->next;
 	}
 	printf("%s\n", DEF_COLOR);

@@ -61,6 +61,7 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 	free(copy);
 	while (tofree && tofree->depth > depth)
 	{
+		toadd = toadd->next;
 		copy = tofree;
 		tofree = tofree->next;
 		toadd->time += copy->time;
@@ -68,7 +69,6 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 			toadd->min = copy->time;
 		if (toadd->max < copy->time)
 			toadd->max = copy->time;
-		toadd = toadd->next;
 		free(copy);
 	}
 	toconnect->next = tofree;
