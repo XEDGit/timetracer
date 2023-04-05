@@ -74,8 +74,9 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 	toconnect->next = tofree;
 }
 
-__attribute__((no_instrument_function)) void	group_functions(t_dlret *func_info)
+__attribute__((no_instrument_function)) int	group_functions(t_dlret *func_info)
 {
+	int				everything_grouped = 1;
 	t_threadlist	*threads = 0;
 	int				curr_depth = 0, err = 0;
 	while (func_info)
@@ -97,6 +98,7 @@ __attribute__((no_instrument_function)) void	group_functions(t_dlret *func_info)
 		//	if match is found delete identical branch and reconnect
 		if (return_val)
 		{
+			everything_grouped = 0;
 			//	find match and calculate horizontal distance
 			int	distance = 0;
 			t_dlret	*cursor = func_info, *last_node = func_info;
@@ -144,4 +146,5 @@ __attribute__((no_instrument_function)) void	group_functions(t_dlret *func_info)
 		perror("Malloc fail");
 		exit(1);
 	}
+	return (everything_grouped);
 }

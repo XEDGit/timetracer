@@ -13,7 +13,7 @@ gcc -finstrument-functions: generates a wrapper to every function
 
 If I subtract the base address to the value recieved as "this_fn" I get the function offset address, which can be compared to the symbol table to get the function name
 
-command for cub3 with timetracer:
-	gcc src/*/*.c timetracer/timetracer.c build/libmlx42.a -o test -lglfw -lm -ldl -g -finstrument-functions -I includes -fsanitize=address
-command for minishell with timetracer:
+command for cub3 with timetracer on Linux:
+	gcc src/*/*.c timetracer/*.c build/libmlx42.a -o test -lglfw -lm -ldl -g -finstrument-functions -I includes
+command for minishell with timetracer on Mac:
 	gcc timetracer/*.c src/*.c src/*/*.c -finstrument-functions -g -o test -I/Users/lmuzio/.brew/opt/readline/include -Iincludes -lreadline -L/Users/lmuzio/.brew/opt/readline/lib -pthread

@@ -158,7 +158,7 @@ __attribute__((no_instrument_function)) static int	search_strstore(const char *t
 
 __attribute__((no_instrument_function)) static char	**copy_strstore(t_strstore *store)
 {
-	int	i = 0;
+	int i = 0;
 	t_strstore *copy = store;
 	while (store)
 	{
@@ -302,6 +302,11 @@ __attribute__((no_instrument_function)) static char	*find_symbol(void *addr)
 			str_buff = 0;
 		}
 		pclose(nm_out_stream);
+		if (!db)
+		{
+			dprintf(2, "Error calling nm\n");
+			return (0);
+		}
 	}
 	t_strptrstore *copy = db;
 	if (!addr && db)
@@ -344,19 +349,12 @@ __attribute__((no_instrument_function)) static clock_t	find_total_time(t_funcdat
 __attribute__((no_instrument_function)) static void	report(void)
 {
 	end_time = clock();
-	t_dlret		*func_info = 0;
+	t_dlret		*func_info = 0, *og;
 	t_strstore	*func_names = 0;
 	//	organizing informations in t_dlret
-	printf("ORGANISE DATA\n");
 	t_funcdata	*copy = 0;
 	char		*name;
 	int			func_index = 0;
-
-	// int fd = open("timetracer_out.txt", O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-	// if (fd > 0)
-	// 	dup2(fd, 1);
-	// else
-	// 	goto free_all;	//DEBUG
 
 	while (data)
 	{
@@ -387,14 +385,8 @@ __attribute__((no_instrument_function)) static void	report(void)
 	//	creating allocated 2d array of strings and freeing linked list
 	char **func_names_arr = copy_strstore(func_names);
 	//	grouping function patterns
-	for (int iter = 0; iter < ITER_GROUP_MAX; iter++)
-		group_functions(func_info);
+	while (!group_functions(func_info));
 	//	displaying data
-	dprintf(2, "DISPLAY DATA\n");
-	t_dlret	*curr_traversed_nodes[MAX_DEPTH + 1];
-	int		curr_depth = 0;
-	curr_traversed_nodes[curr_depth] = func_info;
-	//	set colors
 	char *col[7] = {
 		GRAY,
 		RED,
@@ -404,36 +396,39 @@ __attribute__((no_instrument_function)) static void	report(void)
 		MAGENTA,
 		CYAN
 	};
-	printf("Report:\n");
+	int curr_depth = 0;
+	og = func_info;
 	//	print
-	int	last_depth = 0;
 	while (func_info)
 	{
-		for (int i = 0; i < func_info->depth; i++)
+
+		int len = func_info->depth, increment = 1;
+		if (COLORS)
+		{
+			len *= 9;
+			increment = 9;
+		}
+		char indentation[len + 1];
+		for (int i = 0; i < len; i += increment)
 		{
 			if (COLORS)
-				write(1, col[i % 7], 8);
-			if (i < func_info->depth - 1)
-				write(1, "\t|", 2);
-			else
-				write(1, "\t", 1);
+				memcpy(&indentation[i], col[(i / 9) % 7], 8);
+			memcpy(&indentation[COLORS ? i + 7 : i], "\t|", 2);
 		}
-		last_depth = func_info->depth;
+		indentation[len] = 0;
 		if (func_info->times == 1)
-			printf("%s: %.3fms\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
-		//	TODO use to set threashold with flag
+			printf("%s%s: %.3fms\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
+		//	TODO use to set threshold with flag
 		else if (func_info->time)
-			printf("%s: %.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
+			printf("%s%s: %.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
 		else
-			printf("%s: %.3fms/%d calls\n", func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times);
+			printf("%s%s: %.3fms/%d calls\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times);
 		func_info = func_info->next;
 	}
 	printf("%s\n", DEF_COLOR);
 	//	free func_info and func_names_arr
-	dprintf(2, "FREEING DATA\n");
-	// close(fd); //DEBUG
 	free_all:
-	func_info = curr_traversed_nodes[0];
+	func_info = og;
 	while (func_info)
 	{
 		t_dlret	*to_free = func_info;

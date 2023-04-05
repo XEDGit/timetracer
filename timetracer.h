@@ -11,10 +11,15 @@
 # define __USE_GNU
 # define _GNU_SOURCE
 # include <dlfcn.h>
-# define	MAX_DEPTH 4
-# define	POOL_SIZE 100000
+# define	MAX_DEPTH 2
 # define	ENTER 0
 # define	EXIT 1
+# ifndef POOL_SIZE
+#  define POOL_SIZE 100000
+# endif
+# ifndef COLORS
+#  define COLORS 1
+# endif
 
 typedef struct funcdata {
 	void			*address;
@@ -59,14 +64,8 @@ typedef struct threadlist {
 }	t_threadlist;
 
 __attribute__((no_instrument_function)) static void	report(void);
-__attribute__((no_instrument_function)) void		group_functions(t_dlret *func_info);
+__attribute__((no_instrument_function)) int		group_functions(t_dlret *func_info);
 
-# ifndef COLORS
-#  define COLORS 1
-# endif
-# ifndef ITER_GROUP_MAX
-#  define ITER_GROUP_MAX 5
-# endif
 # define DEF_COLOR "\e[0;39m"
 # define GRAY "\e[0;90m"
 # define RED "\e[0;91m"
