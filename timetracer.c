@@ -6,7 +6,7 @@
 /*   By: lmuzio <lmuzio@student.42.fr>              +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/03/21 16:58:47 by lmuzio            #+#    #+#             */
-/*   Updated: 2023/04/04 20:29:37 by lmuzio           ###   ########.fr       */
+/*   Updated: 2023/04/06 20:15:43 by lmuzio           ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -71,6 +71,31 @@ __attribute__((no_instrument_function)) static int add_node(t_funcdata *new, t_f
 	return (0);
 }
 
+__attribute__((no_instrument_function)) static int	add_grouptimes(t_grouptimes **og)
+{
+	t_grouptimes	*new = malloc(sizeof(t_grouptimes));
+
+	if (!new)
+		return (-1);
+	new->calls = 1;
+	if (*og)
+		new->back = *og;
+	else
+		new->back = 0;
+	*og = new;
+	return (0);
+}
+
+__attribute__((no_instrument_function)) static void	free_grouptimes(t_grouptimes *og)
+{
+	while (og)
+	{
+		t_grouptimes *copy = og;
+		og = og->back;
+		free(copy);
+	}
+}
+
 __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlret **og)
 {
 	static t_dlret	*curr_traversal[MAX_DEPTH + 1] = {0};
@@ -86,11 +111,12 @@ __attribute__((no_instrument_function)) static int	add_dlret(t_dlret tmp, t_dlre
 	new->time = tmp.time;
 	new->type = tmp.type;
 	new->depth = tmp.depth;
-	new->times = 1;
+	new->times = 0;
+	add_grouptimes(&new->times);
 	new->str_id = tmp.str_id;
 	new->next = 0;
-	new->max = 0;
-	new->min = 999999;
+	new->max = tmp.time;
+	new->min = tmp.time;
 	if (last)
 		last->next = new;
 	last = new;
@@ -121,9 +147,7 @@ __attribute__((no_instrument_function)) static int	add_strstore(t_strstore tmp, 
 {
 	t_strstore	*new = malloc(sizeof(t_strstore));
 	if (!new)
-	{
 		return (-1);
-	}
 	new->next = 0;
 	new->str = tmp.str;
 	int iter = 0;
@@ -418,16 +442,17 @@ __attribute__((no_instrument_function)) static void	report(void)
 			if (i < len - increment)
 				memcpy(&indentation[COLORS ? i + 7 : i + 1], "\t|", 2);
 			else
-				indentation[COLORS ? i + 7 : i + 1] = '\t'; 
+				indentation[COLORS ? i + 7 : i + 1] = '\t';
+			//	TODO add representation of grouping
 		}
 		indentation[len - 1] = 0;
-		if (func_info->times == 1)
+		if (func_info->times->calls == 1)
 			printf("%s%s: %.3fms\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
-		//	TODO use to set threshold with flag
+		//	shTODO use to set threshold with flag
 		else if (func_info->time)
-			printf("%s%s: %.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times, (float)(func_info->time / func_info->times) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
+			printf("%s%s: %.3f ms/%d calls = ~%.3fms per call | min: %.3f | max %.3f\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times->calls, (float)(func_info->time / func_info->times->calls) / (float)1000, (float)func_info->min / 1000, (float)func_info->max / 1000);
 		else
-			printf("%s%s: %.3fms/%d calls\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times);
+			printf("%s%s: %.3fms/%d calls\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000, func_info->times->calls);
 		func_info = func_info->next;
 	}
 	printf("%s\n", DEF_COLOR);
@@ -438,6 +463,7 @@ __attribute__((no_instrument_function)) static void	report(void)
 	{
 		t_dlret	*to_free = func_info;
 		func_info = func_info->next;
+		free_grouptimes(to_free->times);
 		free(to_free);
 	}
 	int i = 0;
@@ -467,8 +493,12 @@ void d(){a();b();}
 // 1 2 2 1 1 2 3 4 4 3 1 2 3 3 2
 int main()
 {
+	
 	for (int i = 0; i < 10; i++)
 	{
+		c();
+		d();
+		c();
 		c();
 		d();
 	}

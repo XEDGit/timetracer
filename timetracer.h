@@ -31,11 +31,17 @@ typedef struct funcdata {
 	struct funcdata	*last;
 } t_funcdata;
 
+typedef struct grouptimes {
+	int					calls;
+	struct grouptimes	*back;
+}	t_grouptimes;
+
 typedef struct dladdr_result {
 	int						str_id;
 	clock_t					time;
 	char					type;
-	int						*times;
+	t_grouptimes			*times;
+	int						*times_len;
 	clock_t					max;
 	clock_t					min;
 	int						depth;

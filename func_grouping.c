@@ -22,6 +22,8 @@ __attribute__((no_instrument_function)) static pthread_t	*add_thread(t_threadlis
 	return (&new->thread);
 }
 
+
+//	TODO IMPORTANT make the search go through all nodes on same depth instead of stopping at first equal node and checking only that, the return value should be the destination node address (not 1 as now) or 0 on fail
 __attribute__((no_instrument_function)) static void	*search_matching_branches(void *data)
 {
 	t_dlret	*func_info = (t_dlret *)data;
@@ -56,7 +58,7 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 		toadd->min = tofree->time;
 	if (toadd->max < tofree->time)
 		toadd->max = tofree->time;
-	toadd->times++;
+	toadd->times->calls += tofree->times->calls;
 	t_dlret *copy = tofree;
 	tofree = tofree->next;
 	free(copy);
@@ -70,7 +72,7 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 			toadd->min = copy->time;
 		if (toadd->max < copy->time)
 			toadd->max = copy->time;
-		toadd->times++;
+		// toadd->times->calls++;
 		free(copy);
 	}
 	toconnect->next = tofree;
@@ -106,7 +108,7 @@ __attribute__((no_instrument_function)) int	group_functions(t_dlret *func_info)
 			t_dlret	*cursor = func_info, *last_node = func_info;
 			distance++;
 			cursor = cursor->right;
-			while (cursor && cursor->str_id != func_info->str_id)
+			while (cursor && return_val != func_info)
 			{
 				distance++;
 				last_node = cursor;
