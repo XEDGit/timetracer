@@ -11,7 +11,7 @@
 # define __USE_GNU
 # define _GNU_SOURCE
 # include <dlfcn.h>
-# define	MAX_DEPTH 2
+# define	MAX_DEPTH 5
 # define	ENTER 0
 # define	EXIT 1
 # ifndef POOL_SIZE
@@ -35,7 +35,7 @@ typedef struct dladdr_result {
 	int						str_id;
 	clock_t					time;
 	char					type;
-	int						times;
+	int						*times;
 	clock_t					max;
 	clock_t					min;
 	int						depth;

@@ -402,20 +402,25 @@ __attribute__((no_instrument_function)) static void	report(void)
 	while (func_info)
 	{
 
-		int len = func_info->depth, increment = 1;
+		int len = func_info->depth, increment = 2;
 		if (COLORS)
 		{
 			len *= 9;
 			increment = 9;
 		}
-		char indentation[len + 1];
+		else
+			len *= 2;
+		char indentation[len];
 		for (int i = 0; i < len; i += increment)
 		{
 			if (COLORS)
 				memcpy(&indentation[i], col[(i / 9) % 7], 8);
-			memcpy(&indentation[COLORS ? i + 7 : i], "\t|", 2);
+			if (i < len - increment)
+				memcpy(&indentation[COLORS ? i + 7 : i + 1], "\t|", 2);
+			else
+				indentation[COLORS ? i + 7 : i + 1] = '\t'; 
 		}
-		indentation[len] = 0;
+		indentation[len - 1] = 0;
 		if (func_info->times == 1)
 			printf("%s%s: %.3fms\n", indentation, func_names_arr[func_info->str_id] + OFFSET_FUNC_NAME, (float)func_info->time / (float)1000);
 		//	TODO use to set threshold with flag
@@ -442,28 +447,29 @@ __attribute__((no_instrument_function)) static void	report(void)
 	free(func_names_arr);
 }
 
-// void a();
-// void b();
-// void c();
-// void d();
+void a();
+void b();
+void c();
+void d();
 
-// void a(){b();b();}
-// void b(){}
-// void c(){d();}
-// void d(){a();b();}
-// // a-b-b-b-c-d-a-b-b-b-d-a-b-b-b
-// // 1 2 2 1 1 2 3 4 4 3 1 2 3 3 2
-// int main()
-// {
-// 	// a();
-// 	// b();
-// 	// c();
-// 	// d();
-// 	d();
-// 	d();
-// 	b();
-// 	d();
-// 	d();
-// 	d();
-// 	d();
-// }
+void a()
+{
+	b();
+	b();
+}
+
+void b(){}
+
+
+void c(){d();}
+void d(){a();b();}
+// a-b-b-b-c-d-a-b-b-b-d-a-b-b-b
+// 1 2 2 1 1 2 3 4 4 3 1 2 3 3 2
+int main()
+{
+	for (int i = 0; i < 10; i++)
+	{
+		c();
+		d();
+	}
+}

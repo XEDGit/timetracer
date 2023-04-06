@@ -36,7 +36,7 @@ __attribute__((no_instrument_function)) static void	*search_matching_branches(vo
 		pthread_exit((void *)0);
 	//	check if the two branches are identical
 	t_dlret *end = pattern_end;
-	while (pattern_end && pattern_start != end)
+	while (pattern_end && pattern_start->next != end)
 	{
 		if (pattern_start->str_id != pattern_end->str_id)
 			pthread_exit((void *)0);
@@ -56,6 +56,7 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 		toadd->min = tofree->time;
 	if (toadd->max < tofree->time)
 		toadd->max = tofree->time;
+	toadd->times++;
 	t_dlret *copy = tofree;
 	tofree = tofree->next;
 	free(copy);
@@ -69,6 +70,7 @@ __attribute__((no_instrument_function)) static void	free_branch(t_dlret *tofree,
 			toadd->min = copy->time;
 		if (toadd->max < copy->time)
 			toadd->max = copy->time;
+		toadd->times++;
 		free(copy);
 	}
 	toconnect->next = tofree;
@@ -102,11 +104,10 @@ __attribute__((no_instrument_function)) int	group_functions(t_dlret *func_info)
 			//	find match and calculate horizontal distance
 			int	distance = 0;
 			t_dlret	*cursor = func_info, *last_node = func_info;
-			cursor->times++, distance++;
+			distance++;
 			cursor = cursor->right;
 			while (cursor && cursor->str_id != func_info->str_id)
 			{
-				cursor->times++;
 				distance++;
 				last_node = cursor;
 				cursor = cursor->right;

@@ -17,3 +17,17 @@ command for cub3 with timetracer on Linux:
 	gcc src/*/*.c timetracer/*.c build/libmlx42.a -o test -lglfw -lm -ldl -g -finstrument-functions -I includes
 command for minishell with timetracer on Mac:
 	gcc timetracer/*.c src/*.c src/*/*.c -finstrument-functions -g -o test -I/Users/lmuzio/.brew/opt/readline/include -Iincludes -lreadline -L/Users/lmuzio/.brew/opt/readline/lib -pthread
+
+TODO add depth to times variable for different groupings
+
+could show nested grouped functions through multiple depths of [ or ]
+main: 1.995ms
+|	c: 0.940 ms/10 calls = ~0.094ms per call | min: 0.082 | max 0.129
+|	|	d: 0.730 ms/10 calls = ~0.073ms per call | min: 0.067 | max 0.091
+|	|	|	a: 0.411 ms/10 calls = ~0.041ms per call | min: 0.037 | max 0.058
+|	|	|	|	b: 0.173 ms/11 calls = ~0.015ms per call | min: 0.007 | max 0.095
+|	|	|	b: 0.083 ms/10 calls = ~0.008ms per call | min: 0.007 | max 0.011
+|	d: 0.781 ms/10 calls = ~0.078ms per call | min: 0.067 | max 0.100
+|	|	a: 0.450 ms/10 calls = ~0.045ms per call | min: 0.037 | max 0.065
+|	|	|	b: 0.165 ms/11 calls = ~0.015ms per call | min: 0.007 | max 0.080
+|	|	b: 0.079 ms/10 calls = ~0.007ms per call | min: 0.007 | max 0.009
